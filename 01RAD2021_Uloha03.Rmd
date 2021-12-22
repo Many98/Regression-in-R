@@ -1,0 +1,458 @@
+---
+title: "3. zápočtová úloha z 01RAD"
+author: "Emanuel Frátrik"
+date: "2021-12-16"
+output:
+  pdf_document:
+    number_sections: yes
+    fig_caption: yes
+  tables: yes
+  html_document:
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# 3. zápočtová úloha z 01RAD
+
+## Popis úlohy
+
+Datový soubor vychází z datasetu \texttt{House Sales in King County, USA}, který je k nalezení například na kaggle.com, nebo v knihovně \texttt{library(moderndive)} data \texttt{house\_prices}.
+Původní dataset obsahuje prodejní ceny domů v oblasti King County, která obsahuje i město Seattle, a data byla nasbírána mezi květnem 2014 a květnem 2015. Pro naše potřeby bylo z datasetu vypuštěno jak několik proměnných, také byl dataset výrazně osekán a lehce modifikován.
+
+Dále byl dataset již dopředu rozdělen na tři části, které všechny postupně v rámci 3. zápočtové úlohy využijete.
+
+
+```{r, echo=FALSE,include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+options(warn=-1, digits=3)
+
+
+library(tidyverse)
+library(GGally)
+library(knitr)
+library(MASS)
+library(splines)
+library(car)
+library(olsrr)
+library(lmtest)
+library(nortest)
+
+#library(ggridges)
+
+library(ggpubr)  # ‘ggplot2’ Based Publication Ready Plots
+
+library(patchwork)
+library(kableExtra)
+library(gtsummary) # presentation ready tables
+#library(jtools) # Tools for summarizing and visualizing regression models
+library(modelsummary)
+options(modelsummary_get = "easystats")
+```
+```{r, echo=FALSE}
+
+house <- read.table(file="~/Documents/RAD_cviko/01RAD2021_house.csv",header=TRUE,sep=",")
+knitr::kable(head(house[1:9]))
+knitr::kable(head(house[10:19]))
+
+#pander(head(house_rad))
+```
+
+Data celkem obsahují  následujících 18 proměnných, přičemž naším cílem je prozkoumat vliv 12 z nich na cenu nemovitostí \texttt{price}. Přičemž anglický popis jednotlivých proměnných (sloupců) je následující:
+\begin{center}
+\begin{tabular}{|c|l|}
+\hline
+Feature & Description \\
+\hline
+\texttt{id} & Our notation for a house \\
+\hline
+\texttt{price} & Price is prediction target \\
+\hline
+\texttt{bedrooms} & Number of Bedrooms/House \\
+\hline
+\texttt{bathrooms} & Number of Bathrooms/Bedrooms \\
+\hline
+\texttt{sqft\_living} & Square footage of the home \\
+\hline
+\texttt{sqft\_lot} & Square footage of the lot  \\
+\hline
+\texttt{floors} &  Total floors (levels) in house\\
+\hline
+\texttt{waterfront} & House which has a view to a waterfront  \\
+\hline
+\texttt{view} & Has been viewed \\
+\hline
+\texttt{condition} & How good the condition is Overall \\
+\hline
+\texttt{grade} & Overall grade given to the housing unit\\
+\hline
+\texttt{sqft\_above} & Square footage of house apart from basement  \\
+\hline
+\texttt{sqft\_basement} & Square footage of the basement  \\
+\hline
+\texttt{yr\_built} & Built Year  \\
+\hline
+\texttt{yr\_renovated} & Year when house was renovated \\
+\hline
+\texttt{sqft\_living15} & Living room area in 2015 (implies– some renovations)\\
+\hline
+\texttt{sqft\_lot15} & lotSize area in 2015 (implies– some renovations) \\
+\hline
+\texttt{split} & Splitting variable with train, test and validation sample \\
+\hline
+\end{tabular}
+\end{center}
+
+
+## Podmínky a body
+
+Úkol i protokol vypracujte samostatně. Pokud na řešení nějaké úlohy budete přesto s někým spolupracovat, radit se, nezapomeňte to u odpovědi na danou otázku uvést. Tato zápočtová úloha obsahuje 10 otázek po 1 bodu. Celkem za 3 zápočtové úlohy bude možné získat 30 bodů, přičemž pro získání zápočtu je potřeba více jak 20. Další dodatečné body mohu případně individuálně udělit za řešení mini domácích úkolů z jednotlivých hodin.
+
+## Odevzdání
+
+Protokol ve formátu pdf (včetně příslušného Rmd souboru) odevzdejte prostřednictvím MS Teams, nejpozději do 31. 1. 2022.
+
+
+
+## Průzkumová a grafická část:
+
+* Otázka 01
+
+  Ověřte rozměry datového souboru, typy jednotlivých proměnných,  a shrňte základní popisné charakteristiky všech proměnných. Vykreslete histogram a odhad hustoty pro odezvu \texttt{price}, dá se z toho již něco odvozovat pro budoucí analýzu?
+  
+  \
+* Odpoveď 01
+
+  Dataset obsahuje 2000 pozorovaní popísaných 19 premennými pričom premenná \texttt{X} je rovnaká ako \texttt{id} a preto ju vylúčim. Ostatné relevantné premenné sú reprezentované numerickými hodnotami. Niektoré z nich ako napr. \texttt{view} alebo \texttt{condition},  \texttt{waterfront}, \texttt{grade} popisujú akési triedy a preto ich je možné reprezentovať ako kategorické premenné čo ale nie je nutné a preto to nevykonám. Podobne premenné \texttt{yr\_built} a \texttt{yr\_renovated} popisujú roky vzniku a renovácie domu ale keďže neplánujeme
+predikciu ceny podľa časovej rady bude možno vhodnejšie popisovať roky v desaťročiach resp. obe premenné faktorizovať. Popisné charakteristiky numerických a kategorických premenných sú zhrnuté v tabuľkách \ref{tab:desc} a \ref{tab:desc2}. Histogram rozdelenia premennej \texttt{price} je zobrazený na obrázku \ref{fig:hist}. Vidíme, že rozdelenie je vpravo zošikmené a teda nie normálne. Toto by ale nemalo spôsobovať problémy keďže vyžadovaná je len normalita reziduii. 
+  
+```{r desc , echo=FALSE}
+
+# get rid of redundant variable X
+house <- select(house, -X)
+
+# house <- transform(house, waterfront = as.factor(waterfront), 
+#                          view = as.factor(view),
+#                          condition = as.factor(condition),
+#                          grade = as.factor(grade)
+#                          #, yr_built = as.factor(yr_built),
+#                          #yr_renovated = as.factor(yr_renovated),
+#                         )
+
+
+
+descriptive.stats <- house %>% 
+                      summarise(PREMENNÁ = "price",
+                                PRIEMER = round(mean(price, na.rm = T), 3), 
+                                ROZPTYL = round(var(price, na.rm = T), 4),
+                                MEDIÁN = round(median(price, na.rm = T), 4),
+                                MIN = round(min(price, na.rm = T), 3),
+                                MAX = round(max(price, na.rm = T), 3),
+                                "POČET NA" = sum(is.na(price))
+                               )
+vars <- colnames(house)
+vars <- vars[!(vars %in% c("id", "split", "price"))]
+for (i in vars){
+  descriptive.stats2 <- house %>%
+                      summarise(PREMENNÁ = i,
+                                PRIEMER = round(mean(house[[i]], na.rm = T), 3), 
+                                ROZPTYL = round(var(house[[i]], na.rm = T), 4),
+                                MEDIÁN = round(median(house[[i]], na.rm = T), 4),
+                                MIN = round(min(house[[i]], na.rm = T), 3),
+                                MAX = round(max(house[[i]], na.rm = T), 3),
+                                "POČET NA" = sum(is.na(house[[i]]))
+                               )
+  descriptive.stats <- rbind(descriptive.stats, descriptive.stats2)
+}
+
+options(knitr.kable.NA = '') 
+kable(descriptive.stats, format = "latex", 
+      caption = "Popisné štatistiky pre numerické premenné", 
+      align = "rrrrr") %>%
+  kable_styling(position = "center")
+
+```
+
+
+```{r desc2, results='asis'}
+# lets represent years as factors rather than integers as we do not plan to use for time series forecast
+house <- house %>%
+                mutate(
+                  yr_built = cut(yr_built, c(1900, 1920, 1940, 1960, 1980, 2000, 2020) ,include.lowest=T),
+                  yr_built = factor(yr_built, label=c("1900-20", "1921-40" ,"1941-60", "1961-80", "1981-2000", 
+                                                              "2000-2015")),
+                  yr_renovated = cut(yr_renovated, c(0, 1930, 1940, 1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020), 
+                                     include.lowest=T),
+                  yr_renovated = factor(yr_renovated, label=c("never", "1931-40", "1941-50" ,"1951-60", "1961-70", "1971-80", 
+                                                              "1981-90", "1991-2000", "2001-2010", "2011-2015"))
+                )
+
+
+house %>% select("yr_built", "yr_renovated") %>%
+                tbl_summary(
+                           type = all_continuous() ~ "continuous2",
+                           statistic = list(all_continuous() ~ c("{mean}",  "{sd}", "{median}"),
+                                           all_categorical() ~ "{n} / {N} ({p}%)"),
+                           digits = all_continuous() ~ 2,
+                           missing_text = "Počet NA hodnôt"
+      ) %>%
+#     #add_stat_label(label = all_continuous() ~ c("Priemer", "St. odchýlka", "Medián")) %>%  
+     modify_header(label ~ "**PREMENNÁ**")  %>%
+#     #modify_caption("**Table 1. Deskriptívne charakteristiky pre kategorické premenné**") %>%
+     as_kable_extra(caption = "Popisné charakteristiky pre kategorické premenné") %>% kable_styling(position = "center")
+```
+
+
+
+
+```{r, label="hist", fig.width=7,fig.height=3.6, fig.cap="\\label{fig:hist}Histogramový a jadrový odhad hustoty premennej `price`"}
+# EACH IMAGE CODE CHUNK NEEDS TO BE SEPARATED AT LEAST WITH TWO NEWLINE SPACINGS IF U WANT CAPTIONS
+hist_price <- ggplot(house, aes(x = price)) + 
+                 geom_histogram(aes(y = ..density..), colour='black', fill='mediumpurple1', binwidth = 85000,
+                                alpha=0.3, position="identity") +
+                 xlab("Cena nehnutelnosti (price)") +
+                 ylab("Odhad hustoty")
+                 #geom_density(kernel = "gaussian", alpha = 0.2, bw = "nrd0") 
+
+                 
+hist_price + geom_density(kernel = "gaussian", alpha = 0.2, bw = "nrd0") 
+
+```
+
+
+* Otázka 02
+
+  Jsou všechny proměnné použitelné pro analýzu a predikci ceny nemovitostí? Pokud data obsahují chybějící hodnoty, (případně nesmyslné hodnoty), lze je nějak nahradit (upravit), nebo musíme data odstranit?
+  
+  \
+* Odpoveď 02
+
+    Premenné relevantné na predikciu sú všetky okrem premennej \texttt{id} a \texttt{split}, ktoré nepopisujú nejaké vlastnosti domu ale sú to len pomocné premenné. Ostatné relevantné premenné bude treba preskúmať predovšetkým na multikolinearitu. Dataset neobsahuje žiadne chýbajúce hodnoty. Prediktor \texttt{grade} obsahuje 6 veľmi vysokých hodnôt oproti ostatným hodnotám. Tieto hodnoty sú pravdepodobne chybné. Takéto chybné pozorovania nemusíme nutne odstraňovať ale môžeme ich napr. nahradiť priemerom alebo v prípade kategorickej premennej skôr modusom teda najčastejšou hodnotou. Možné by bolo aj natrénovať model z ostatných dát a tento použiť na predikciu chýbajúcich/chybných dát.
+
+
+```{r chi2, results='asis'}
+# Chi sq. test of homogeneity in groups
+chi2_price <- house %>%
+                summarise("premenná" = "price",
+                          "chi2 statistic" = chisq.test(cut(.$price, seq(0, 8500000, 85000), include.lowest = T), 
+                                                        .$split)$statistic,
+                          "p-value" = chisq.test(cut(.$price, seq(0, 8500000, 85000), include.lowest = T), .$split)$p.value)
+
+chi2_sqft_living <- house %>%
+                      summarise("premenná" = "sqft_living",
+                                "chi2 statistic" = chisq.test(cut(.$sqft_living, seq(0, 10100, 100), include.lowest = T), 
+                                                              .$split)$statistic,
+                                "p-value" = chisq.test(cut(.$sqft_living, seq(0, 10100, 100), include.lowest = T), 
+                                                       .$split)$p.value)
+
+chi2_grade <- house %>%
+                      summarise("premenná" = "grade",
+                                "chi2 statistic" = chisq.test(.$grade, .$split)$statistic,
+                                "p-value" = chisq.test(.$grade, .$split)$p.value)
+
+chi2_yr_built <- house %>%
+                      summarise("premenná" = "yr_built",
+                                "chi2 statistic" = chisq.test(.$yr_built, .$split)$statistic,
+                                "p-value" = chisq.test(.$yr_built, .$split)$p.value)
+
+options(knitr.kable.NA = '') 
+kable(rbind(chi2_price, chi2_sqft_living, chi2_grade, chi2_yr_built), format = "latex",  
+      caption = "Výsledky Chi squared testu homogenity rozdelenia premenných vybraných premenných v `train`, `test` a `validation` kategoriach",
+      digits = c(3, 3, 4, 2, 3), align = "rrrrr") %>%
+  kable_styling(position = "center", latex_options = "hold_position")
+```
+
+
+* Otázka 03
+ 
+  Zkontrolujte pro 4 vybranné proměnné (price, sqft_living, grade, yr_built) bylo-li rozdělení datasetu pomocí proměnné split náhodné. Tj mají zmíněné proměnné ve skupinách train, test a validation přibližně stejné rozdělení?
+\
+\
+\
+\
+\
+
+* Odpoveď 03
+
+  Rovnakosť resp. homogenitu rozdelenie v skupinách \texttt{train}, \texttt{test} a \texttt{validation} pre 4 vybrané premenné
+  môžme overiť pomocou \texttt{chi-squared} testu homogenity pričom spojité premenné je potrebné najskôr kategorizovať. Zhrnutie výsledkov testu môžme vidieť v tabuľke \ref{tab:chi2}. Vo všetkých štyroch prípadoch vyšiel výsledok testu nesignifikantne na hladine 0.05 a preto nezamietame hypotézu o homogenite rozdelenia v kategóriach \texttt{train}, \texttt{test} a \texttt{validation} vo všetkých štyroch prípadoch.
+
+## Lineární model (použijte pouze trénovací data, tj. split == "train"):
+
+```{r model_summary5, results='asis'}
+train_data <- house %>% filter(split == "train") %>% select(!c("id", "split"))
+test_data <- house %>% filter(split == "test")  %>% select(!c("id", "split"))
+validation_data <- house %>% filter(split == "validation")  %>% select(!c("id", "split"))
+
+mod <- lm(price ~ (.), data=train_data)
+
+kappa <- train_data %>% select(!c("price", "yr_renovated", "yr_built")) %>% scale() %>% kappa()
+
+options(knitr.kable.NA = '') 
+kable(as.data.frame(vif(mod)), format = "latex",  
+      caption = "VIF faktor pre dizajnovu maticu všetkych regresorov",
+      digits = c(3, 3, 4, 2, 3), align = "rrrrr") %>%
+  kable_styling(position = "center", latex_options = "hold_position")
+
+```
+
+```{r model_summary6, results='asis'}
+
+mod2 <- lm(price ~ (.) - sqft_above - sqft_living - sqft_lot, data=train_data)
+kappa2 <- train_data %>% select(!c("price", "yr_renovated", "yr_built", "sqft_above", "sqft_living", "sqft_lot")) %>% scale() %>% kappa()
+
+options(knitr.kable.NA = '') 
+kable(as.data.frame(vif(mod2)), format = "latex",  
+      caption = "VIF faktor pre dizajnovu maticu po vynechani niektorych regresorov",
+      digits = c(3, 3, 4, 2, 3), align = "rrrrr") %>%
+  kable_styling(position = "center", latex_options = "hold_position")
+
+```
+  
+  
+```{r, label="pairs", fig.width=8.5,fig.height=8.5, fig.cap="\\label{fig:pairs}Scatter plot medzi numerickými premennými"}
+
+train_data  %>% ggpairs(upper = list(continuous = wrap("cor", size = 2)), lower = list(continuous = wrap("points", alpha = 0.3,    size=0.3))) + theme_grey(base_size = 7) + theme(axis.text.x = element_text(angle = 45,                                                                                                                         hjust = 1), axis.text.y = element_text(angle = 45,                                                                                                                         hjust = 1))
+
+```
+
+
+
+* Otázka 04
+
+  Spočtěte korelace mezi jednotlivými regressory a graficky je znázorněte. Dále spočtěte číso podmmíněnosti matice regresorů Kappa a VIF. Pokud se v datech vyskytuje znatelná multicollinearita, rozhodněte jaké proměnné a proč použijete v následném linárním modelu.
+  
+* Odpoveď 04
+
+  Korelačné koeficienty ako aj scatterploty resp. boxploty sú znázornené na obrázku \ref{fig:pairs}. Vysoká korelácia medzi prediktormi môže naznačovať kolinearitu medzi danými prediktormi. Z obrázka vidíme, že takýmito kolineárnymi prediktormi môžu byť napríklad \texttt{sqft\_living} a \texttt{bathrooms} ďalej \texttt{sqft\_living} a \texttt{sqft\_above} čo je v zhode s popisom daných dvoch regresorov. Vysokú mieru korelácie vykazujú aj regresory \texttt{sqft\_living} a \texttt{sqft\_living15} a podobne aj
+\texttt{sqft\_lot} a \texttt{sqft\_lot15}. Čo sa týka \texttt{VIF}
+ faktora tak tento je zobrazený v tabuľke  \ref{tab:model_summary5} pričom v prvom stĺpci vidíme klasickú hodnotu \texttt{VIF} a v poslednom stĺpci tabuľku zobecnený \texttt{VIF}, ktorý je použiteľný aj pre faktorové premenné keďže zahŕňa aj počet stupňov voľnosti. \texttt{VIF} faktor poukazuje na multikolinearitu pravdepodobne medzi regresormi \texttt{sqft\_living}, \texttt{sqft\_above} a \texttt{sqft\_basement}. Po odstránení regresoru \texttt{sqft\_above} sa hodnoty \texttt{VIF} znížili pod hodnotu 5. Ďalej predpokladám, že cena jednotlivých domov bola stanovená práve v roku 2014-15 a preto na ňu mal vplyv aktuálny stav. Na základe tejto úvahy ale aj koeficientov korelácie som sa rozhodol ďalej z datasetu vylúčiť regresory \texttt{sqft\_livng} a \texttt{sqft\_lot} a ponechať len korešpondujúce regresory pre rok 2015. \texttt{VIF} faktor po odstránení troch regresorov je zobrazený v tabuľke \ref{tab:model_summary6} pričom už nedetekujem výraznú multikolinearitu. Pre 2 kategorické premenné je lepšie analyzovať zobecnený \texttt{VIF} pričom tento ešte umocniť na druhú. Takto prepočítaný zobecnený \texttt{VIF} pre \texttt{yr\_built} a \texttt{yr\_renovated} nepoukazujú na možnú multikolinearitu.
+Kappa koeficient pre plnú dizajnovú maticu bez faktorových premenných bol odhadnutý na `r kappa` čo sa po odstránení troch spomínaných regresorov znížilo na `r kappa2`.
+
+
+```{r, echo=FALSE}
+
+model <- mod2
+
+
+```
+
+```{r model_summary8, results='asis'}
+
+msummary(models=list("Vybraný model" = model), fmt = "%.4f"
+             ,gof_omit = 'DF|Log.Lik|AIC|BIC|F', statistic = c(
+                                               "p-val = {p.value}"),
+             metrics = list("rmse", "R2"),
+             title="") 
+
+```
+
+* Otázka 05
+    
+  Pouze pomocí trénovacích dat (tj., split == "train") a všech vybranných proměnných najděte vhodný lineární regresní model, který má za úkol predikovat co nejlépe cenu, tj. minimalizovat střední kvadratickou chybu reziduí (MSE). Jakou jinou metriku pro výběr modelu byste případně navrhovali a proč? U výsledného modelu porovnejte VIF a Kappa s původní celkovou maticí regresorů.
+  
+
+
+
+```{r, echo=FALSE}
+
+
+```
+
+* Odpoveď 05
+
+  Zhrnutie vybraného lineárneho modelu je v tabuľke \ref{tab:model_summary8}. Daný model dosahuje na trénovacích dátach hodnotu \texttt{MSE} rovnú `r summary(model)$sigma^2`. Upravená štatistika $\hat{R}^2$ dosiahla hodnotu  `r summary(model)$adj.r.squared`. Podľa môjho názoru sa ako metrika pre výber môže použiť aj štatistika $R^2$ nakoľko tiež hodnotí relatívnu predikčnú kvalitu modelu podobne ako \texttt{MSE}. Namiesto strátovej funkcie $L_2$ v prípade \texttt{MSE} môžme použiť napr. $L_1$ a získame tak \texttt{MAE} metriku.
+  
+```{r, echo=FALSE}
+
+
+```
+
+* Otázka 06
+
+   Pro Vámi vybraný model z předešlé otázky spočtěte příslušné infulenční míry. Uveďtě id pro 20 pozorování s největší hodnotou DIFF, největší hodnotou leverage (hatvalues) a největší hodnotou Cookovy vzdálenosti. (tj, 3 krát 20 hodnot). Jaká pozorování považujete za vlivná a odlehlá pozorování a proč?
+
+* Odpoveď 06
+
+
+  
+  
+```{r, echo=FALSE}
+
+cook <- sort(cooks.distance(model), decreasing = T)[1:20]
+dffits <- sort(abs(dffits(model)), decreasing=T)[1:20]
+hat <- sort(hatvalues(model), decreasing = T)[1:20]
+
+r = sum(hatvalues(model)) # = rank(X)
+n = length(train_data)
+leverage_level = 3*r/n
+cook_level <- qf(0.5,r,n-r)
+dffits_level = 3*sqrt(r/(n-r))
+```
+
+* Otázka 07
+
+  Validujte model pomocí grafického znázornění reziduí (Residual vs Fitted, QQ-plot, Cookova vzdálenost, Leverages, ...).
+  Identifikovali jste na základě této a předchozí otázky v datech nějaká podezřelá pozorování, která mohla vzniknout při úpravě datasetu? Doporučili byste tyto pozorování z dat odstranit?
+
+
+
+## Train, test, validation ...:
+
+
+* Otázka 08
+
+  Pokud jste se rozhodli z dat odstranit nějaká pozorování, tak dále pracujtes s vyfiltrovaným datasetem a přetrénujte model z otázky 5. A spočtěte pro tento model $R^2$ statistiku a MSE jak na trénovacích tak testovacích datech (split == "test").
+
+```{r, echo=FALSE}
+
+model_overfit <- train_data %>% select(!c("sqft_lot", "sqft_living", "sqft_above")) %>% lm(price ~ poly(bedrooms, 4)+
+                                                                                 poly(bathrooms, 4)+poly(condition, 4) +
+                                                                                 poly(sqft_basement, 8) + 
+                                                                                 poly(floors, 4) + poly(grade, 4) +
+                                                                                 poly(grade, 4)+poly(view, 4) + waterfront +
+                                                                                 yr_built+yr_renovated+
+                                                                                 poly(sqft_living15,8)+poly(sqft_lot15, 8), 
+                                                                               data=.)
+
+p_train_overfit <- predict(model_overfit, newdata = train_data)
+p_test_overfit <- predict(model_overfit, newdata = test_data)
+
+r2_train_overfit <- cor(p_train_overfit, train_data$price)^2
+mse_train_overfit <- mean((p_train_overfit - train_data$price)^2)
+
+r2_test_overfit <- cor(p_test_overfit, test_data$price)^2
+mse_test_overfit <- mean((p_test_overfit - test_data$price)^2)
+
+```
+
+* Otázka 09
+
+  Pomocí hřebenové regrese (případně pomocí LASSO a Elastic Net) zkuste najít nejlepší hyperparametr(y) tak, aby výsledný model měl co nejmenší MSE na testovacích datech. K odhadu regresních koeficientů použijte ale pouze trénovací data. 
+
+```{r, echo=FALSE}
+
+
+```
+
+* Otázka 10
+
+  Vyberte výsledný model a porovnejte MSE a $R^2$ na trénovacích, testovacích a validačních datech. Co z těchto hodnot usuzujete o kvalitě modelu a případném přetrénování? Je váš model vhodný pro predikci cen nemovitostí v okolí King County? Pokud ano, má tato predikce nějaká omezeni?
+
+```{r, echo=FALSE}
+p_train <- predict(model, newdata = train_data)
+p_test <- predict(model, newdata = test_data)
+p_validation <- predict(model, newdata = validation_data)
+
+p_train_overfit <- predict(model_overfit, newdata = train_data)
+p_test_overfit <- predict(model_overfit, newdata = test_data)
+p_validation_overfit <- predict(model_overfit, newdata = validation_data)
+
+r2_test_overfit <- cor(p_test, test_data$price)^2
+mse_test_overfit <- mean((p_test-test_data$price)^2)
+
+```

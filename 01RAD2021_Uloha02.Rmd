@@ -1,0 +1,867 @@
+---
+title: "2. zápočtová úloha z 01RAD"
+author: "Emanuel Frátrik"
+date: '2021-12-13'
+output:
+  pdf_document:
+    number_sections: yes
+    fig_caption: yes
+  tables: yes
+  html_document:
+    df_print: paged
+header-includes: \usepackage[slovak]{babel}
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# 2. zápočtová úloha z 01RAD
+
+## Popis úlohy
+
+Datový soubor \texttt{Boston} je obsažen v balíku \texttt{MASS} a lze použít rovnou po načtení příslušné knihovny.
+
+```{r, echo=FALSE,include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+options(warn=-1, digits=3)
+
+
+library(tidyverse)
+library(GGally)
+library(knitr)
+library(MASS)
+library(splines)
+library(car)
+library(olsrr)
+library(lmtest)
+library(nortest)
+
+#library(ggridges)
+
+library(ggpubr)  # ‘ggplot2’ Based Publication Ready Plots
+#library(RColorBrewer)
+library(patchwork)
+library(kableExtra)
+library(gtsummary) # presentation ready tables
+#library(jtools) # Tools for summarizing and visualizing regression models
+library(modelsummary)
+Sys.setenv(`_R_S3_METHOD_REGISTRATION_NOTE_OVERWRITES_` = "false")
+options(modelsummary_get = "easystats")
+```
+
+```{r, echo=FALSE}
+knitr::kable(head(Boston))
+```
+
+
+Obsahuje celkem 506 záznamů z obcí v předměstí města Boston, MA, USA a data pocházejí ze studie v roce 1978.Viz Harrison, D. and Rubinfeld, D.L. (1978) Hedonic prices and the demand for clean air. J. Environ. Economics and Management 5, 81–102.
+
+
+Základní charakteristiky ohledně jednotlivých proměnných získáte pomocí funkcí \texttt{str(Boston)} a \texttt{summary(Boston)}.
+
+
+Data celkem obsahují 14 proměnných, přičemž naším cílem je prozkoumat vliv 13 z nich na cenu nemovitostí \texttt{medv}. Přičemž anglický popis jednotlivých proměnných (sloupců) je následující:
+\begin{center}
+\begin{tabular}{|c|l|}
+\hline
+Feature & Description \\
+\hline
+\texttt{crim} & per capita crime rate by town  \\
+\hline
+\texttt{zn} & proportion of residential land zoned for lots over 25,000 sq.ft  \\
+\hline
+\texttt{indus} & proportion of non-retail business acres per town  \\
+\hline
+\texttt{chas} & Charles River dummy variable (= 1 if tract bounds river; 0 otherwise)  \\
+\hline
+\texttt{nox} & nitrogen oxides concentration (parts per 10 million)  \\
+\hline
+\texttt{rm} & average number of rooms per dwelling  \\
+\hline
+\texttt{age} & proportion of owner-occupied units built prior to 1940  \\
+\hline
+\texttt{dis} & weighted mean of distances to five Boston employment centres  \\
+\hline
+\texttt{rad} & index of accessibility to radial highways  \\
+\hline
+\texttt{tax} & full-value property-tax rate per \$10,000  \\
+\hline
+\texttt{ptratio} & pupil-teacher ratio by town  \\
+\hline
+\texttt{black} &  $1000(B_k - 0.63)^2$ where $B_k$ is the proportion of blacks by town  \\
+\hline
+\texttt{lstat} & lower status of the population (percent)  \\
+\hline
+\texttt{medv} & median value of owner-occupied homes in \$1000s  \\
+\hline
+\end{tabular}
+\end{center}
+
+## Podmínky a body
+
+Úkol i protokol vypracujte samostatně. Pokud na řešení nějaké úlohy budete přesto s někým spolupracovat, radit se, nezapomeňte to u odpovědi na danou otázku uvést. Tato zápočtová úloha obsahuje 10 otázek po 1 bodu. Celkem za 3 zápočtové úlohy bude možné získat 30 bodů, přičemž pro získání zápočtu je potřeba více jak 20. Další dodatečné body mohu případně individuálně udělit za řešení mini domácích úkolů z jednotlivých hodin.
+
+## Odevzdání
+
+Protokol ve formátu pdf (včetně příslušného Rmd souboru) odevzdejte prostřednictvím MS Teams, nejpozději do půlnoci  15. 12. 2021 (tj. za cca 3 týdny).
+
+## Průzkumová a grafická část::
+
+* Otázka 01
+
+  Zjistěte, zdali data neobsahují chybějící hodnoty, ověřte rozměry datového souboru a shrňte základní popisné charakteristiky všech proměnných. Vykreslete histogram a odhad hustoty pro odezvu \texttt{medv}. 
+Medián ceny nemovitostí je spojitá proměnná, zkontrolujte tabulku četností jednotlivých hodnot. Diskutujte zdali některé hodnoty nejsou způsobeny zaokrouhlením, useknutím a podobně. Měření která považujete z tohoto pohledu za nedůvěryhodná odstraňte. Co to znamená z pohledu modelu odezvy  \texttt{medv}?
+
+```{r desc, results='asis'}
+data(Boston)
+#str(Boston)
+#summary(Boston)
+
+boston <- Boston
+
+descriptive.stats <- boston %>% 
+                      summarise(PREMENNÁ = "crim",
+                                PRIEMER = round(mean(crim, na.rm = T), 3), 
+                                ROZPTYL = round(var(crim, na.rm = T), 4),
+                                MEDIÁN = round(median(crim, na.rm = T), 4),
+                                MIN = round(min(crim, na.rm = T), 3),
+                                MAX = round(max(crim, na.rm = T), 3),
+                                "POČET NA" = sum(is.na(crim))
+                               )
+vars <- colnames(boston)
+vars <- vars[!(vars %in% c("chas", "rad", "crim"))]
+for (i in vars){
+  descriptive.stats2 <- boston %>%
+                      summarise(PREMENNÁ = i,
+                                PRIEMER = round(mean(boston[[i]], na.rm = T), 3), 
+                                ROZPTYL = round(var(boston[[i]], na.rm = T), 4),
+                                MEDIÁN = round(median(boston[[i]], na.rm = T), 4),
+                                MIN = round(min(boston[[i]], na.rm = T), 3),
+                                MAX = round(max(boston[[i]], na.rm = T), 3),
+                                "POČET NA" = sum(is.na(boston[[i]]))
+                               )
+  descriptive.stats <- rbind(descriptive.stats, descriptive.stats2)
+}
+
+
+options(knitr.kable.NA = '') 
+kable(descriptive.stats, format = "latex", 
+      caption = "Deskriptívne štatistiky pre spojité (numerické) premenné", 
+      align = "rrrrr") %>%
+  kable_styling(position = "center")
+
+```
+
+
+```{r desc2, results='asis'}
+#knitr::kable(table(as.factor(boston$medv)))
+```
+
+
+
+```{r desc3, results='asis'}
+boston$chas <- as.factor(boston$chas)
+boston$rad <- as.factor(boston$rad)
+boston %>% select("chas", "rad") %>%
+                tbl_summary(
+                           type = all_continuous() ~ "continuous2",
+                           statistic = list(all_continuous() ~ c("{mean}",  "{sd}", "{median}"),
+                                           all_categorical() ~ "{n} / {N} ({p}%)"),
+                           digits = all_continuous() ~ 2,
+                           missing_text = "Počet NA hodnôt"
+      ) %>%
+#     #add_stat_label(label = all_continuous() ~ c("Priemer", "St. odchýlka", "Medián")) %>%  
+     modify_header(label ~ "**PREMENNÁ**")  %>%
+#     #modify_caption("**Table 1. Deskriptívne charakteristiky pre kategorické premenné**") %>%
+     as_kable_extra(caption = "Deskriptívne charakteristiky pre kategorické premenné") %>% kable_styling(position = "center")
+```
+
+
+```{r, label="hist", fig.width=7,fig.height=3.6, fig.cap="\\label{fig:hist}Histogramový a jadrový odhad hustoty premennej `medv`"}
+# EACH IMAGE CODE CHUNK NEEDS TO BE SEPARATED AT LEAST WITH TWO NEWLINE SPACINGS IF U WANT CAPTIONS
+boston$medv <- as.numeric(boston$medv)
+hist_medv <- ggplot(boston, aes(x = medv)) + 
+                 geom_histogram(aes(y = ..density..), colour='black', fill='mediumpurple1', binwidth = 1.5,
+                                alpha=0.3, position="identity") +
+                 xlab("Cena nehnutelnosti (medv) [1000$]") +
+                 ylab("Odhad hustoty")
+                 #geom_density(kernel = "gaussian", alpha = 0.2, bw = "nrd0") 
+
+                 
+hist_medv + geom_density(kernel = "gaussian", alpha = 0.2, bw = "nrd0") 
+
+
+# get rid of suspicious records
+boston<-boston[!(boston$medv==50),]
+      
+```
+
+
+```{r, label="pairs", fig.width=8.5,fig.height=8.5, fig.cap="\\label{fig:pairs}Scatter plot medzi numerickými premennými"}
+
+boston %>% dplyr::select(where(is.numeric)) %>% ggpairs()
+
+```
+
+
+```{r, label="pairs2", fig.width=7,fig.height=7, fig.cap="\\label{fig:pairs2}Scatter plot medzi diskrétnymi premennými a premennými `crim` a `medv`"}
+
+boston %>% subset(select = c("crim", "medv", "rad", "chas")) %>% ggpairs()
+
+```
+
+
+
+* Odpoveď 01
+
+    Dataset \texttt{Boston} obsahuje 506 pozorovaní, popísaných štrnástimi premennými. V datasete sa nenachádzajú žiadne \texttt{NA} hodnoty.
+Prehľad popisných štatistík pre jednotlivé premenné sa nachádza v tabuľke \ref{tab:desc}. Premenná \texttt{chas} a premmená \texttt{rad} sú popísané diskrétnymi hodnotami a preto ich ďalej reprezentujeme faktorovými premennými. Odhad hustoty premennej \texttt{medv} je vyobrazený na obrázku \ref{fig:hist}. Ako môžme vidieť na tomto obrázku tak v okolí hodnoty \texttt{medv}=50 je náhly skok a po bližšej
+inšpekcii tejto premennej v sme zistili, že hodnota 50 je v datasete obsiahnutá až 16-krát. Keďže táto hodnota tvorí zároveň hraničnú hodnotu tak je možné, že vznikla zaokrúhlením všetkých vyšších cien na 50 čo spôsobilo jej zvýšenú častosť. Kvôli tomuto podozreniu je vhodné záznamy s hodnotou \texttt{medv}=50 vylúčiť.
+
+## Regresní model závislosti mediánu ceny nemovitosti na znečištění v okolí nemovitosti
+
+
+
+* Otázka 2
+
+  Sestavte jednoduchý regresní model a na jeho základech zjistěte zdali kriminalita \texttt{crim} v okolí ovlivňuje cenu nemovitostí určených k bydlení. Pokud ano, o kolik je cena nemovitostí nižší v závislosti na míře kriminality? 
+  
+
+```{r model_summary, results='asis'}
+
+model <- lm(medv ~ crim, data=boston)
+
+msummary(list("Lineárny model"=model), statistic_vertical = FALSE, fmt = "%.4f", gof_omit = 'DF|Deviance|Log.Lik', statistic = c(
+                                                     "s.e. = {std.error}", 
+                                                     "t-stat = {statistic}",
+                                                     "p-val = {p.value}", 
+                                                     "conf.int"),
+             metrics = list("rmse", "AIC", "BIC", "F", "R2"),
+             title="Model závislosti ceny nehnuteľnosti (medv) na miere kriminality (crim)") 
+
+
+```
+
+
+```{r, label="scat", fig.width=7,fig.height=3.6, fig.cap="\\label{fig:scat}Model závislosti ceny nehnuteľnosti (medv) na miere kriminality na jedného obyvateľa(crim)"}
+
+scatter <- boston %>% 
+  ggplot(aes(x = crim, y = medv)) + 
+  geom_point(shape=18, color="purple") + 
+  #geom_smooth(formula=y~x, se = F) +
+  #geom_smooth(formula=y~x-1, se = TRUE)+
+  xlab("Miera kriminality na obyvatela")+
+  ylab("Cena nehnutelnosti v 1000 $")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(0, 95) + 
+  ylim(0, 55)
+ 
+reg_line <- geom_abline(aes(intercept = coefficients(model)[1],                
+                                      slope=coefficients(model)[2], color="Lineárny model (bez transformácie)"))
+x_line <-  geom_abline(intercept = 0, slope = 0, color="black", 
+                        size=0.05)
+
+scatter + reg_line + x_line
+
+
+```
+
+
+* Odpoveď 2
+
+  Model závislosti ceny nehnuteľnosti (\texttt{medv}) na miere kriminality (\texttt{crim}) sa ukazuje byť štatisticky významný s p-hodnotou
+`r anova(model)$"Pr(>F)"[1]`. Podobne aj jednotlivé premenné sú štatisticky významné čo môžeme vidieť v tabuľke \ref{tab:model_summary} spolu s hodnotou $R^2$=`r summary(model)$r.squared`. Na základe tohto modelu a za predpokladu splenenia všetkých predpokladov regresie môžme povedať, že pri zvýšení miery kriminality na jedného obyvateľa o jednotku sa očakávaná cena nehnuteľnosti zmenší o `r -coefficients(model)[2] * 1000` $. 
+
+
+* Otázka 3
+
+  Vyzkoušejte model s mocninou a logaritmickou transformací odezvy. Pro výběr mocniné transformace vykreslete optimální  log-věrohodnostní profil u Box-Coxovy transformace a porovnejte navrženou transformaci s provedenou logaritmickou.
+  
+
+
+```{r, label="log-profile", fig.width=5,fig.height=5, fig.cap="\\label{fig:log-profile}Log-likelihood profil box-cox transformácie modelu"}
+
+bc <- boxcox(model)
+
+```
+
+
+```{r model_summary2, results='asis'}
+#bc <- boxcox(model)
+power <- round(bc$x[which.max(bc$y)], 1)
+model_power <- lm((medv^power - 1) / power ~ crim, data=boston)
+model_log <- lm(log(medv) ~ crim, data=boston)
+
+modelsummary(list("Základ. model" = model, "Model po box-cox transf."=model_power, "Model po log. transf." = model_log), fmt = "%.4f"
+             ,gof_omit = 'DF|Log.Lik', statistic = c(
+                                               "s.e. = {std.error}", 
+                                               "t-stat = {statistic}",
+                                               "p-val = {p.value}"),
+             metrics = list("rmse", "AIC", "BIC", "F", "R2"),
+             title="Porovnanie modelov") 
+
+```
+
+
+```{r, label="scat4", fig.width=7,fig.height=3.6, fig.cap="\\label{fig:scat4}Porovnanie modelov po transformácii odozvy a jednoduchého lineárneho modelu závislosti ceny nehnuteľnosti (medv) na miere kriminality na jedného obyvateľa (crim)"}
+
+data_linear <- boston %>%
+      select( -matches('(fit|lwr|upr)'))  %>%
+      cbind( predict(model, newdata=., interval='confidence') )
+
+data_power <- boston %>%
+      select( -matches('(fit|lwr|upr)'))  %>%
+      cbind( predict(model_power, newdata=., interval='confidence') )
+data_power <- data_power %>% mutate(
+                    fit = ((power*fit)+1)^(1/power),
+                    lwr = ((power*lwr)+1)^(1/power),
+                    upr = ((power*upr)+1)^(1/power))
+
+data_log <- boston %>%
+      select( -matches('(fit|lwr|upr)'))  %>%
+      cbind( predict(model_log, newdata=., interval='confidence') )
+data_log <- data_log %>% mutate(
+                      fit = exp(fit),
+                      lwr = exp(lwr),
+                      upr = exp(upr))
+      
+scatter <-   boston %>%   
+                ggplot( aes(x = crim, y = medv)) + 
+          geom_point(shape=18, color="purple") + 
+                #geom_smooth(formula=y~x, se = F) +
+                #geom_smooth(formula=y~x-1, se = TRUE)+
+        geom_line(data=data_linear, aes(y=fit, color = "Lineárny model"))+
+        geom_line(data=data_power, aes(y=fit, color = "Mocninná transformácia odozvy"))+
+        geom_line(data=data_log, aes(y=fit, color = "Log. transformácia odozvy"))+
+  scale_colour_manual("", 
+                      breaks = c( "Lineárny model", "Mocninná transformácia odozvy", "Log. transformácia odozvy"),
+                      values = c("red", "green", "blue"))+
+            
+                geom_ribbon(data=data_linear, aes(ymin=lwr, ymax=upr), alpha=.13 ) +
+                geom_ribbon(data=data_power, aes(ymin=lwr, ymax=upr), alpha=.13 ) +
+                geom_ribbon(data=data_log, aes(ymin=lwr, ymax=upr), alpha=.13 ) +
+                xlim(0, 95) + 
+                ylim(-25, 55)+xlab("Miera kriminality na obyvatela")+
+                ylab("Cena nehnutelnosti v 1000 $")+
+                theme(plot.title = element_text(hjust = 0.5))
+                
+                
+
+scatter  
+```
+
+
+
+* Odpoveď 3
+
+  V tabuľke \ref{tab:model_summary2} vidíme porovnanie jednotlivých modelov po transformáciach odozvy ako aj základný model. Použitie box-cox ako aj logaritmickej transformácie zvýšilo hodnotu $R^2$ štatistiky postupne o 10% a 12% oproti jednoduchému modelu bez transformácie odozvy. Avšak porovnanie $R^2$ štatistiky prípadne iných kritérii ako napr. \texttt{AIC} medzi týmito troma modelmi môže byť zavádzajúce nakoľko nelineárne transformácie zmenili škálu odozvy a teda aj reziduii. Takéto porovnávanie preto nemá zmysel. Oba modely po transformácii odozvy sú ako celky štatisticky významné uvažujúc hladinu 0.05. Na obrázku \ref{fig:log-profile} vidíme profil log-likelihood pre odhad optimálneho parametra na boxcox transformáciu. Tento parameter bol odhadnutý a zaokrúhlený na `r power` pričom ako je vidieť na spomínanom obrázku, 95% interval odhadu tohto parametra zahŕňa aj nulu. Výber parametra lambda na nulu je ekvivalentné logaritmickej transformácii. Výber práve logaritmickej transformácie oproti mocninnej s parametrom `r power` nám umožní jednoduchší spôsob ako vysvetliť význam premenných v našom modeli. Finálny výber jedného z týchto troch modelov by mal byť preto založený na fakte či transformácia odozvy pomohla splniť predpoklady o linearite modelu prípadne o normalite a homoskedasticite a nie na tom či zdanlivo zvýšila hodnotu $R^2$ štatistiky. Nakoniec na obrázku \ref{fig:scat4} môžme vidieť znázornenie priebehu modelov. Modely s transformovanou odozvou boli vypočítané na základe inverznej transformácie odozvy čo ale spôsobí, že krivky na obrázku neznázorňujú očakávanú hodnotu odozvy \texttt{medv} ale napr. v prípade logaritmickej transformácie medián odozvy \texttt{medv}.
+
+* Otázka 4
+
+  Z předchozího modelu vyčtěte procentuální navýšení/pokles ceny nemovitostí při změně míry znečištění o jeden stupeň (odpověď typu: 
+Střední cena nemovitosti v lokalitách okolo Bostonu,  liších se o počet kriminálních deliktů na 1000 obyvatel daného města, klesá/roste zhruba o XX% na každou 1 jednotku nárůstu kriminálních deliktů.
+
+* Odpoveď 4
+
+  Očakávaná cena nehnuteľností sa pri náraste miery kriminality na 1000 obyvateľov o jednotku podľa log-transformovaného modelu zníži o `r (1- exp(coefficients(model_log)[2]/1000)) * 100`%.
+
+
+  
+```{r model_summary3, results='asis'}
+model_log_2 <- lm(log(medv) ~ poly(crim, 2), data=boston)
+model_log_3 <- lm(log(medv) ~ poly(crim, 3), data=boston)
+model_log_splines <- lm(log(medv) ~ bs(crim, knots=c(5, 10, 25)), data=boston)
+#model_log_log <- lm(log(medv) ~ log(crim), data=boston) -> najhorsi takze nezobrazujem
+
+# partially constant
+boston2 <- boston
+boston2$crim <-as.factor(cut(boston$crim, c(0,2,6,15,20,25, 90)))
+model_log_const <- lm(log(medv) ~ crim, data=boston2)
+
+modelsummary(list("Kvadratický" = model_log_2, "Kubický"=model_log_3, "Spliny" = model_log_splines), fmt = "%.4f"
+             ,gof_omit = 'DF|Log.Lik', statistic = c(
+                                               "s.e. = {std.error}",
+                                               "p-val = {p.value}"),
+             metrics = list("rmse", "AIC", "BIC", "F", "R2"),
+             title="Porovnanie modelov") 
+
+```
+
+
+
+```{r, label="cr", fig.width=7,fig.height=7, fig.cap="\\label{fig:cr}Čiastočné reziduálne grafy"}
+
+par(mfrow = c(2, 2))
+crPlots(model_log)
+crPlots(model_log_2)
+crPlots(model_log_3)
+crPlots(model_log_splines)
+```
+
+
+```{r model_summary4, results='asis'}
+
+msummary(models=list("Po častiach konštantný model" = model_log_const), fmt = "%.4f"
+             ,gof_omit = 'DF|Log.Lik', statistic = c(
+                                               "s.e. = {std.error}",
+                                               "p-val = {p.value}"),
+             metrics = list("rmse", "AIC", "BIC", "F", "R2"),
+             title="") 
+
+```
+
+
+
+
+```{r, label="scat5", fig.width=7,fig.height=3.6, fig.cap="\\label{fig:scat5}Porovnanie modelov po transformácii a jednoduchého lineárneho modelu závislosti ceny nehnuteľnosti (medv) na miere kriminality na jedného obyvateľa (crim)"}
+
+# data_linear <- boston %>%
+#       select( -matches('(fit|lwr|upr)'))  %>%
+#       cbind( predict(model, newdata=., interval='confidence') )
+
+data_log_const <- boston2 %>%
+      select( -matches('(fit|lwr|upr)'))  %>%
+      cbind( predict(model_log_const, newdata=., interval='confidence') )
+
+data_log_const <- data_log_const %>% mutate(
+                    crim = boston$crim,
+                    fit = exp(fit),
+                    lwr = exp(lwr),
+                    upr = exp(upr))
+
+# data_log_log <- boston %>%
+#       select( -matches('(fit|lwr|upr)'))  %>%
+#       cbind( predict(model_log_log, newdata=., interval='confidence') )
+# data_log_log <- data_log_log %>% mutate(
+#                     fit = exp(fit),
+#                     lwr = exp(lwr),
+#                     upr = exp(upr))
+
+
+data_log_2 <- boston %>%
+      select( -matches('(fit|lwr|upr)'))  %>%
+      cbind( predict(model_log_2, newdata=., interval='confidence') )
+
+data_log_2 <- data_log_2 %>% mutate(
+                    fit = exp(fit),
+                    lwr = exp(lwr),
+                    upr = exp(upr))
+
+data_log_3 <- boston %>%
+      select( -matches('(fit|lwr|upr)'))  %>%
+      cbind( predict(model_log_3, newdata=., interval='confidence') )
+data_log_3 <- data_log_3 %>% mutate(
+                      fit = exp(fit),
+                      lwr = exp(lwr),
+                      upr = exp(upr))
+
+data_log_splines <- boston %>%
+      select( -matches('(fit|lwr|upr)'))  %>%
+      cbind( predict(model_log_splines, newdata=., interval='confidence') )
+data_log_splines <- data_log_splines %>% mutate(
+                      fit = exp(fit),
+                      lwr = exp(lwr),
+                      upr = exp(upr))
+      
+scatter <-   boston %>%   
+                ggplot( aes(x = crim, y = medv)) + 
+          geom_point(shape=18, color="purple") + 
+                #geom_smooth(formula=y~x, se = F) +
+                #geom_smooth(formula=y~x-1, se = TRUE)+
+        #geom_line(data=data_linear, aes(y=fit, color = "Lineárny model"))+
+        geom_line(data=data_log_2, aes(y=fit, color = "Kvadratický model"))+
+        geom_line(data=data_log_3, aes(y=fit, color = "Kubický model"))+
+        geom_line(data=data_log_splines, aes(y=fit, color = "Spliny"))+
+        geom_line(data=data_log_const, aes(y=fit, color = "Po castiach konst. model"))+
+        #geom_line(data=data_log_log, aes(y=fit, color = "Log model"))+
+  scale_colour_manual("", 
+                      breaks = c(
+                        #"Lineárny model",
+                        "Kvadratický model", "Kubický model", "Spliny", "Po castiach konst. model"),
+                      values = c(
+                        #"red",
+                        "green", "red", "orange", "black"))+
+            
+                #geom_ribbon(data=data_linear, aes(ymin=lwr, ymax=upr), alpha=.13 ) +
+                #geom_ribbon(data=data_power, aes(ymin=lwr, ymax=upr), alpha=.13 ) +
+                #geom_ribbon(data=data_log, aes(ymin=lwr, ymax=upr), alpha=.13 ) +
+                xlim(0, 95) + 
+                ylim(-25, 55)+xlab("Miera kriminality na obyvatela")+
+                ylab("Cena nehnutelnosti v 1000 $")+
+                theme(plot.title = element_text(hjust = 0.5))
+                
+                
+
+scatter  
+```
+
+
+```{r anova_summary, results='asis'}
+
+anova(model_log_2, model_log_3) %>% 
+  kable( format = "latex", 
+      caption = "Výsledky F-testu pre kvadratický a kubický model.") %>% 
+  kable_styling(position = "center")
+
+```
+
+
+* Otázka 5
+
+  Zachovejte logaritmickou trasformaci odezvy a zkuste transformovat i nezávislou proměnnou \texttt{crim}. Vyzkoušejte například po částech konstantní transformaci, splines a polynomiální transformace (kvadratickou a kubickou). Zkuste využít informací získaných například z \texttt{crPlots(model)}. Lze některé z těchto modelů testovat mezi sebou F-testem? Pokud ano, proveďte a diskutujte.  
+  
+* Odpoveď 5
+
+  Obrázok \ref{fig:cr} zobrazuje čiastočné reziduálne grafy pre modely bez transformovaného regresoru \texttt{crim}, s kvadratickou a kubickou transformáciou a nakoniec s použitím splinov. Z týchto štyroch grafov sa dá vypozorovať, že kvadratická, kubická transformácia pomohli zlepšiť linearitu modelu. Model s použitím splinov vylepšil linearitu zdanlivo najlepšie. Dané transformácie boli teda vhodné. Nakoľko všetky modely používajú logaritmicky transformovanú odozvu tak je možné ich zrovnávať napr. pomocou $R^2$ štatistiky a tak získať náhľad na ich kvalitu. Porovnávať F-testom je možné len vnorené modely a síce v tomto prípade kvadratický a kubický model. V ostatných prípadoch je vhodné použiť na porovnanie modelov informačné kritéria ako napr. \texttt{AIC} alebo \texttt{BIC} prípadne porovnávať pomocou \texttt{RMSE} a $R^2$. Porovanie kvadratického a kubického modelu F-testom je zobrazené v tabuľke \ref{tab:anova_summary}. Tento F-test poukazuje na štatisticky významný rozdiel medzi kvadratickým a kubickým modelom na hladine významnosti 0.05 a preto spomedzi týchto modelov je vhodné vybrať ten lepší a síce kubický model. Tabuľky \ref{tab:model_summary3} a \ref{tab:model_summary4} sumarizujú všetky modely. Na základe štatistík $R^2$, \texttt{AIC} ale aj \texttt{RMSE} sa ukazuje za najlepšie popísujúci model, model využívajúci spliny. Na druhú stranu \texttt{BIC} kritérium preferuje oproti modelu so splinami jednoduchší, kubický model. Po častiach konštantný model je taktiež štatisticky významný a dosahuje porovnateľné hodnoty $R^2$, \texttt{AIC} a \texttt{RMSE} s ostatnými modelmi (viz. tab. \ref{tab:model_summary3} a \ref{tab:model_summary4}). V jednorozmernom prípade máme možnosť vizuálne porovnať kvalitu fitu modelu. Takáto vizualizácia je zobrazená na obrázku \ref{fig:scat5} opäť získaného po spätnej transformácii odozvy \texttt{medv}. Vizuálne sú všetky štyri modely porovnateľne dobré čo je v zhode s väčšinou spomínaných štatistík.
+
+
+
+```{r, label="resid", fig.width=7,fig.height=3.6, fig.cap="\\label{fig:resid}Diagnostika reziduii kubického modelu"}
+
+A <-ggplot(model_log_3, aes(.fitted, .resid)) +
+  geom_point(shape=5, color="green", size=0.5) +
+  geom_smooth(se = T)+
+  ylab("Rezidua")+
+  xlab("Nafitované hodnoty")
+
+B <-ggplot(model_log_3, aes(.fitted, sqrt(abs(.stdresid)))) +
+  geom_point(shape=5, color="green", size=0.5) +
+  geom_smooth(se = T)+
+  ylab(expression(sqrt(abs("Student. rezidua"))))+
+  xlab("Nafitované hodnoty")
+
+C <- ggplot(model_log_3) +
+  stat_qq(aes(sample = .stdresid), color="green", shape=5, size=0.5) +
+  geom_abline()+
+  ylab("Rezidua")+
+  xlab("Teoretické kvantily")
+
+D <- ggplot(model_log_3, aes(.resid)) +
+     geom_histogram(aes(y = ..density..), fill = 'steelblue', color = 'black', binwidth = 0.1,
+                                alpha=0.3, position="identity")+
+    ylab("Odhad hustoty")+
+    xlab("Rezidua")
+
+A + B + C + D  # `patchwork` package handles this
+
+
+```
+
+
+```{r variance, results='asis'}
+
+variance.check1 <-  summarise(boston, "Test" = "Breusch-Pagan",
+                                       "statistic" = bptest(model_log_3)$statistic,
+                                       "p-value" = bptest(model_log_3)$p.value)
+
+options(knitr.kable.NA = '') 
+kable(variance.check1, format = "latex",  
+      caption = "Výsledok Breusch-Paganovho testu heteroskedasticity reziduii kubického modelu",
+      digits = c(3, 3, 4, 2, 3), align = "rrrrr") %>%
+  kable_styling(position = "center")
+```
+
+
+```{r normality, results='asis'}
+# Shapiro-Wilks test of normality of groups of observations according to drive-train
+normality.check1 <-  summarise(boston, "Test" = "Shapiro-Wilk",
+                                       "statistic" = shapiro.test(residuals(model_log_3))$statistic,
+                                       "p-value" = shapiro.test(residuals(model_log_3))$p.value)
+normality.check2 <-  summarise(boston, "Test" = "Lilliefors",
+                                        "statistic" = lillie.test(residuals(model_log_3))$statistic,
+                                       "p-value" = lillie.test(residuals(model_log_3))$p.value)
+
+
+options(knitr.kable.NA = '') 
+kable(rbind(normality.check1, normality.check2), format = "latex",  
+      caption = "Výsledok testov normality reziduii kubického modelu",
+      digits = c(3, 3, 4, 2, 3), align = "rrrrr") %>%
+  kable_styling(position = "center")
+```
+
+
+* Otázka 6
+
+  Vyberte jeden z předešlých modelů, zdůvodněte jeho výběr a validujte ho pomocí příslušných testů hypotéz na rezidua (normalita, homoscedasticita, ...) a pomocí příslušných obrázků (QQplot, residua vs. fitted, atd.)
+
+* Odpoveď 6
+
+  Za najvhodnejší model považujem kubický model nakoľko dosahuje relatívne vysoké hodnoty $R^2$ resp. nízke hodnoty \texttt{RMSE}, \texttt{AIC} a najnižšiu hodnotu kritéria \texttt{BIC}, ktoré, je známe tým, že viac penalizuje nadbytočné parametre modelu. Podľa ostatných metrík je lepším modelom, model so splinami, ktorý má ale dvakrát viac parametrov čo môže viesť k overfitu. Podľa môjho názoru prichádza do úvahy aj po častiach konštantný model ale ako bolo spomenuté vyberám kubický model. Obrázok \ref{fig:resid} zobrazuje diagnostiku rezidui kubického modelu.
+Na spodných dvoch podobrázkoch vidíme, že model nemá zásadný problém s predpokladom normality čo ale nie je v zhode s výsledkami štatistických testov, ktoré detekovali významnú deviáciu od normality na hladine 0.05 viď. tabuľka \ref{tab:normality}). Čo sa týka homoskedasticity rezidui tak Breasch-Paganov test sa ukázal byť štatisticky nevýznamný a preto nezamietame nulovú hypotézu o homoskedasticite rezidui (viz tabuľka \ref{tab:variance}). Toto je v zhode s oboma hornými podobrázkami v \ref{fig:resid}. Nevidno na nich, žiaden trend a rezidua sú rozmiestnené viac-menej náhodne okolo modrých kriviek ktoré sú približne vodorovné. Model taktiež nemá problém s predpokladom linearity čo usudzujem podľa ľavého-dolného podobrázka v \ref{fig:cr}. Reziduá sú tam rovnomerne rozmiestnené okolo modrej prerušovanej priamky resp. táto priamka je v približnej zhode s ružovou lokálne regresnou krivkou.
+
+
+## Vícerozměrný regresní model
+
+```{r model_summary5, results='asis'}
+# crim - per capita crime rate by town - OK
+# zn - proportion of residential land zoned for lots over 25,000 sq.ft - OK
+# indus - proportion of non-retail business acres per town - OK
+# chas - Charles River dummy variable (= 1 if tract bounds river; 0 otherwise) - X
+# nox - nitrogen oxides concentration (parts per 10 million) - maybe
+# rm - average number of rooms per house/flat - OK
+# age - proportion of owner-occupied units built prior to 1940 - maybe
+# dis - weighted mean of distances to five Boston employment centres OK
+# rad - index of accessibility to radial highways - maybe * the higher the better
+# tax - full-value property-tax rate per $10,000 - OK
+# pratio - pupil-teacher ratio by town - maybe
+# black - 1000(B k − 0.63) 2 where B k is the proportion of blacks by town - wtf
+# lstat - lower status of the population (percent) - maybe
+# medv - median value of owner-occupied homes in $1000s - response
+
+model_my <- lm(log(medv) ~ crim + rm + tax + lstat + dis + zn, data = boston) # what I think
+model_max <- lm(log(medv) ~ ., data = boston)
+model_min <- lm(log(medv) ~ 1, data = boston)
+
+
+# choose model according to F-test
+# model_forward_F <- ols_step_forward_p(model_max)$model
+model_backward_F <- ols_step_backward_p(model_max)$model
+model_both_F <- ols_step_both_p(model_max)$model # same as model_backward_AIC ( as all AIC based models )
+
+# choose model according to AIC | they all give same result set of features
+# model_forward_AIC <- ols_step_forward_aic(model_max)$model
+model_backward_AIC <- ols_step_backward_aic(model_max)$model
+# model_both_AIC <- ols_step_both_aic(model_max)$model
+```
+
+```{r, results='hide'}
+# choose model according to BIC
+model_forward_BIC <- step(model_min, direction="forward", scope=list("lower"=model_min, "upper"=model_max), 
+                          k=log(nobs(model_max)))
+#model_backward_BIC <- step(model_max, direction="backward", scope=list("lower"=model_min, "upper"=model_max)
+#                    , k=log(nobs(model_max)))
+model_both_BIC <- step(model_min, direction="both", scope=list("lower"=model_min, "upper"=model_max),
+                       k=log(nobs(model_max)))
+
+```
+
+```{r model_summary6, results='asis'}
+
+model_corrected_AIC <-  lm( log(medv) ~ poly(crim, 2) + zn + nox + poly(rm, 2) + dis + rad + tax + ptratio+ black + lstat, data=boston) # upraveny model kvoli nelinearite viz dalej
+
+summ <- BIC(model_my, model_max, model_backward_F, model_backward_AIC, model_forward_BIC, model_both_BIC, model_log_3, 
+            model_corrected_AIC) %>%
+        cbind("AIC"=AIC(model_my, model_max, model_backward_F, model_backward_AIC, model_forward_BIC, model_both_BIC,  
+                        model_log_3, model_corrected_AIC)$AIC)
+models <- list( model_max, model_backward_F, model_backward_AIC, model_forward_BIC, model_both_BIC, model_log_3, 
+                model_corrected_AIC) 
+summ2 <- boston %>% 
+                      summarise(R2_adj = summary(model_my)$adj.r.squared,
+                                RMSE = summary(model_my)$sigma, 
+                                PRESS = sum(((exp(predict(model_my, newdata=boston)) - medv) / (1 -   
+                                              hatvalues(model_my)))^2)
+                               )
+for (mod in models){
+  summ3 <- boston %>%
+                      summarise(R2_adj = summary(mod)$adj.r.squared,
+                                RMSE = summary(mod)$sigma, 
+                                PRESS = sum(((exp(predict(mod, newdata=boston)) - medv) / (1 -   
+                                              hatvalues(mod)))^2)
+                               )
+  summ2 <- rbind(summ2, summ3)
+}
+
+options(knitr.kable.NA = '') 
+kable(cbind(summ, summ2), format = "latex",  
+      caption = "Porovnanie viacrozmerných modelov + kubického modelu. (PRESS je vypočítaná po spätnej transformácii)",
+      digits = c(3, 3, 4, 2, 3), align = "rrrrr") %>%
+  kable_styling(position = "center")
+
+
+```
+
+```{r model_anova1, results='asis'}
+# formula(model_my)
+# formula(model_forward_BIC)
+# formula(model_both_BIC)
+# formula(model_backward_AIC)
+# formula(model_backward_F)
+# formula(model_max)
+
+
+names <- c("model_my", "model_backward_AIC", "model_backward_F", "model_max")
+anova(model_my, model_backward_AIC, model_backward_F, model_max) %>%
+cbind(data.frame("Model"=names)) %>%
+  kable( format = "latex", 
+      caption = "Výsledky F-testu pre prvú skupinu vnorených viacrozmerných modelov") %>% 
+  kable_styling(position = "center")
+
+
+```
+
+```{r model_anova2, results='asis'}
+
+names2 <- c("model_both_BIC", "model_forward_BIC", "model_backward_AIC", "model_backward_F", "model_max")
+anova(model_both_BIC, model_forward_BIC, model_backward_AIC, model_backward_F, model_max) %>%
+cbind(data.frame("Model"=names2)) %>%
+  kable( format = "latex", 
+      caption = "Výsledky F-testu pre druhú skupinu vnorených modelov.") %>% 
+  kable_styling(position = "center")
+```
+
+
+* Otázka 7
+
+  Zkonstruujte lineární model s logaritmicky transformovanou odezvou \texttt{medv} a zkuste najít vztah mezi cenou a dalšími nezávislými proměnnými, které máte k dispozici (stačí aditivní model bez interakcí). Na základě kritérií jako jsou \texttt{AIC, BIC, $R^2$, F, atd. } vyberte podle vás nejvhodnější model. Lze vztah mezi \texttt{crim} a \texttt{medv}, pokud existuje, vysvětlit pomocí jiných proměnných? Tj, že například oblasti s vyšší kriminalitou jsou v blízkosti dálnic, je tam větší znečištění atd.?
+  
+* Odpoveď 7
+  
+  Na konštrukciu optimálneho modelu môžme preskúmať metriky modelov založených na každej podmnožine regresorov. Toto je ale zdĺhavé. Ďalšou možnosťou je použiť doprednú alebo postupnú regresiu alebo spätnú elimináciu na základe F-testov alebo informačných kritérii. Taktiež môžme využiť našu expertnú znalosť a vybrať podľa nás optimálnu množinu regresorov a na jej základe vystavať model. Takto vzniklo celkovo 10 modelov plus model obsahujúci všetky regresory. V tabuľke \ref{tab:model_summary6} sú zobrazené všetky odlišné modely porovnané podľa metrík \texttt{AIC}, \texttt{BIC}, \texttt{RMSE}, $R^2$ a nakoniec podľa \texttt{PRESS} štatistiky, ktorá bola vypočítaná po spätnej exponenciálnej transformácii predikovaných hodnôt kvôli tomu aby sa táto štatistika dala použiť na porovnanie predikčnej kvality všetkých doteraz uvažovaných modelov. Výsledný model bol vybratý na základe F-testu medzi vnorenými modelmi. Tabuľka \ref{tab:model_anova1} prezentuje výsledok F-testu medzi prvou množinou vnorených modelov. Z tejto tabuľky môžme vyčítať, že medzi modelom, v ktorom boli vybraté podľa mňa najrelevantnejšie regresory a modelom získaným pomocou spätnej eliminácie s kritériom AIC je štatisticky významný rozdiel na hladine 0.05 ale na druhú stranu sa tento model štatisticky významne nelíši od modelu so všetkými premennými resp. s modelom získaného spätnou elimináciou podľa F-testu. Teda je z tejto množiny najvhodnejšie vybrať model získaný pomocou \texttt{AIC}. Z tabuľky \ref{tab:model_anova2} plynie rovnaký záver a síce, že najvhodnejšie je vybrať model získaný spätnou elimináciou pomocou kritéria  \texttt{AIC}. Treba dodať, že postupná regresia ale aj dopredná regresia pomocou \texttt{AIC} vybrali rovnaké regresory. 
+  Čo sa týka vysvetlenia vzťahu medzi \texttt{medv} a \texttt{crim} tak je možné, že napr. oblasti s vyšším percentuálnym zastúpením nevzdelaných obyvateľov ( \texttt {lstat}) budú vykazovať vyššiu mieru kriminality. Takýto záver naznačuje relatívne vysoká korelácia resp. trend v scatterplote medzi \texttt{crim} a \texttt {lstat} (viď. obrázok \ref{fig:pairs} ). Na podobrázkoch v prvom riadku vidíme korelácie \texttt{crim} so všetkými spojitými premennými. Na druhú stranu je možno vhodnejšie preskúmať scatterploty nakoľko korelačný koeficient môže byť blízky nule a zároveň premenné môžu vykazovať istý spoločný trend. Odhliadnúc teda od korelácie tak zo scatterplotov v prvom stĺpci obrázku \ref{fig:pairs} je možné, že ešte premenné \texttt {age} a \texttt {dis} vykazujú vzťah s premennou \texttt {crim}, pričom o príčinnom vzťahu medzi nimi silno pochybujem. Z boxplotov v \ref{fig:pairs2} sa zdá, že by mohla existovať slabá závislosť medzi kriminalitou a prístupnosťou k diaľnici. Opäť ale môže platiť, že táto zdanlivú závislosť môže byť iba náhodná a nie príčinná.   
+
+* Otázka 8
+
+  Použijte ve výsledném modelu krimalitu (proměnnou \texttt{crim}) a porovnejte jak se změnil vliv kriminality na medián ceny nemovitostí oproti jednoduchému regresnímu modelu s log transformovanou odezvou (viz otázka 4). Jaké je snížení průměrné ceny nemovitostí při vzrůstu kriminality o jednu jednotku na 1000 obyvatel? Pokud  proměnnou \texttt{crim} v modelu nemáte tak ji pro tuto otázku do modelu přiřaďte.
+
+* Odpoveď 8
+
+  Vo vybratom modely  na základe  \texttt{AIC} je premenná \texttt{crim} stále štatisticky významná. Jej vplyv na odozvu oproti jednoduchému modelu sa ale vo viacrozmernom modely znížil `r coef(model_log)[2] / coef(model_backward_AIC)[2]` krát. V novom viacrozmernom modely sa očakávaná cena nehnuteľností pri náraste miery kriminality na 1000 obyvateľov o jednotku (ceteris paribus) zníži o `r (1- exp(coefficients(model_backward_AIC)[2]/1000)) * 100`%.
+
+
+```{r, label="resid2", fig.width=7,fig.height=3.6, fig.cap="\\label{fig:resid2}Diagnostika reziduii v multirozmernom modely"}
+
+A_ <-ggplot(model_backward_AIC, aes(.fitted, .resid)) +
+  geom_point(shape=5, color="gold4", size=0.5) +
+  geom_smooth(se = T)+
+  ylab("Rezidua")+
+  xlab("Nafitované hodnoty")
+
+B_ <-ggplot(model_backward_AIC, aes(.fitted, sqrt(abs(.stdresid)))) +
+  geom_point(shape=5, color="gold4", size=0.5) +
+  geom_smooth(se = T)+
+  ylab(expression(sqrt(abs("Student. rezidua"))))+
+  xlab("Nafitované hodnoty")
+
+C_ <- ggplot(model_backward_AIC) +
+  stat_qq(aes(sample = .stdresid), color="gold4", shape=5, size=0.5) +
+  geom_abline()+
+  ylab("Rezidua")+
+  xlab("Teoretické kvantily")
+
+D_ <- ggplot(model_backward_AIC, aes(.resid)) +
+     geom_histogram(aes(y = ..density..), fill = 'slateblue', color = 'black', binwidth = 0.1,
+                                alpha=0.3, position="identity")+
+    ylab("Odhad hustoty")+
+    xlab("Rezidua")
+
+A_ + B_ + C_ + D_  # `patchwork` package handles this
+
+
+```
+
+
+```{r, label="cr2", fig.width=7,fig.height=7, fig.cap="\\label{fig:cr2}Čiastočné reziduálne grafy viacrozmerného modelu"}
+
+crPlots(model_backward_AIC, terms = ~ crim + rm)
+
+
+```
+
+
+```{r variance2, results='asis'}
+
+variance.check1 <-  summarise(boston, "Test" = "Breusch-Pagan",
+                                       "statistic" = bptest(model_backward_AIC)$statistic,
+                                       "p-value" = bptest(model_backward_AIC)$p.value)
+
+options(knitr.kable.NA = '') 
+kable(variance.check1, format = "latex",  
+      caption = "Výsledok Breusch-Paganovho testu heteroskedasticity reziduii vo vybratom viacrozmernom modely",
+      digits = c(3, 3, 4, 2, 3), align = "rrrrr") %>%
+  kable_styling(position = "center")
+```
+
+
+```{r normality2, results='asis'}
+# Shapiro-Wilks test of normality of groups of observations according to drive-train
+normality.check1 <-  summarise(boston, "Test" = "Shapiro-Wilk",
+                                       "statistic" = shapiro.test(residuals(model_backward_AIC))$statistic,
+                                       "p-value" = shapiro.test(residuals(model_backward_AIC))$p.value)
+normality.check2 <-  summarise(boston, "Test" = "Lilliefors",
+                                        "statistic" = lillie.test(residuals(model_backward_AIC))$statistic,
+                                       "p-value" = lillie.test(residuals(model_backward_AIC))$p.value)
+
+
+options(knitr.kable.NA = '') 
+kable(rbind(normality.check1, normality.check2), format = "latex",  
+      caption = "Výsledok testov normality reziduii vo vybratom viacrozmernom modely",
+      digits = c(3, 3, 4, 2, 3), align = "rrrrr") %>%
+  kable_styling(position = "center")
+```
+
+
+```{r model_summary8, results='asis'}
+
+modelsummary(models=list("Multirozmerný model podľa AIC" = model_backward_AIC, "Viacrozmerný model s transformovanými prediktormi `crim` a `rm`" = model_corrected_AIC), fmt = "%.4f"
+             ,gof_omit = 'DF|Log.Lik', statistic = c(
+                                               "p-val = {p.value}"),
+             metrics = list("rmse", "AIC", "BIC", "F", "R2"),
+             title="") 
+
+```
+
+
+```{r, label="resid3", fig.width=7,fig.height=3.6, fig.cap="\\label{fig:resid3}Diagnostika reziduii vo viacrozmernom modely po transformácii `crim` a `rm`"}
+
+A_ <-ggplot(model_corrected_AIC, aes(.fitted, .resid)) +
+  geom_point(shape=5, color="gold4", size=0.5) +
+  geom_smooth(se = T)+
+  ylab("Rezidua")+
+  xlab("Nafitované hodnoty")
+
+B_ <-ggplot(model_corrected_AIC, aes(.fitted, sqrt(abs(.stdresid)))) +
+  geom_point(shape=5, color="gold4", size=0.5) +
+  geom_smooth(se = T)+
+  ylab(expression(sqrt(abs("Student. rezidua"))))+
+  xlab("Nafitované hodnoty")
+
+C_ <- ggplot(model_corrected_AIC) +
+  stat_qq(aes(sample = .stdresid), color="gold4", shape=5, size=0.5) +
+  geom_abline()+
+  ylab("Rezidua")+
+  xlab("Teoretické kvantily")
+
+D_ <- ggplot(model_corrected_AIC, aes(.resid)) +
+     geom_histogram(aes(y = ..density..), fill = 'slateblue', color = 'black', binwidth = 0.1,
+                                alpha=0.3, position="identity")+
+    ylab("Odhad hustoty")+
+    xlab("Rezidua")
+
+A_ + B_ + C_ + D_  # `patchwork` package handles this
+
+
+
+```
+
+
+```{r, label="cr3", fig.width=7,fig.height=7, fig.cap="\\label{fig:cr3}Čiastočné reziduálne grafy viacrozmerného modelu po transformácii `crim` a `rm`"}
+
+crPlots(model_corrected_AIC, terms = ~ poly(crim,2) + poly(rm,2))
+
+```
+
+
+* Otázka 9
+
+	Prezentujte váš výsledný model pro predikci \texttt{medv}, diskutujte výsledné parametry $R^2$, $\sigma$, $F$ a porovnejte je s jednoduchým lin. modelem z otázky 6. Jak se změnily a dala se tato změna očekávat? Validujte model (jak graficky, tak pomocí příslušných testů hypotéz).
+
+* Odpoveď 9
+  
+  Obrázok \ref{fig:resid2} zobrazuje diagnostiku reziduii viacrozmerného modelu získaného pomocou spätnej eliminácie na základe \texttt{AIC} kritéria.
+Na spodných dvoch podobrázkoch vidíme, že model nemá zásadný problém s predpokladom normality čo ale nie je v zhode s výsledkami štatistických testov, ktoré detekovali významnú deviáciu od normality na hladine 0.05 (viď tabuľka \ref{tab:normality2}). Podobne aj  homoskedasticita reziduii bola zamietnutá podľa Breasch-Paganovho testu (viď tabuľka \ref{tab:variance2}). Toto je v zhode s oboma hornými podobrázkami v \ref{fig:resid2} kde vidíme, že rozptyl reziduii sa zmenšuje so zväčšujúcou sa hodnotou nafitovanej hodnoty. Rezidua tiež vykazujú mierny nelineárny trend čo môže naznačovať problém s predpokladom linearity. Problém s linearitou v premennej \texttt{crim} a \texttt{rm}
+naznačuje aj čiastočný reziduálny graf \ref{fig:cr2}. Preto navrhujeme transformovať tieto premenné napr. kvadraticky.
+Porovnanie vybraného modelu a modelu po transformácii premenných \texttt{crim} a \texttt{rm} je v tabuľke \ref{tab:model_summary8}. Obrázky \ref{fig:cr2} a \ref{fig:resid3} naznačujú, že transformácia \texttt{crim} a \texttt{rm} pomohla s linearitou. Mierna deviácia od homoskedasticity stále pretrváva.
+  V tabuľke \ref{tab:model_summary6} vidíme porovnanie všetkých viacrozmerných modelov, vrátane modelu po transformácii \texttt{crim} a \texttt{rm} ako aj jednoduchého kubického modelu (z otázky 6). Ako sa dalo očakávať tak pridaním nových regresorov bola do modelu vnesená nová informácia čo zlepšilo kvalitu modelu oproti jednoduchému kubickému modelu (model_log_3) vzhľadom k všetkým uvádzaným metrikám. Taktiež vidíme, že kvadratická transformácia \texttt{crim} a \texttt{rm} priniesla ďalšie zlepšenie všetkých metrík oproti všetkým modelom. Čo sa týka predikcie tak je asi najrelevantnejšie merať \texttt{PRESS} štatistiku ktorá bola ako už bolo spomenuté vypočítaná po spätnej exponenciálnej transformácii čo síce nebolo nutné keďže všetky modely v tabuľke majú log. transformovanú odozvu ale prípadne to umožní formálne porovnanie s modelmy bez tranformácie odozvy.  Vybraný viacrozmerný model (model_backward_AIC) dosiahol spomedzi ostatných viacrozmerných modelov najlepšie hodnotu tejto \texttt{PRESS} štatistiky pričom použitie transformácie \texttt{crim} a \texttt{rm} prinieslo ešte ďalšie zlepšenie. Na predikciu by som teda vybral model označený ako (model_corrected_AIC) (viď tabuľka \ref{tab:model_summary8}).
+
+
+* Otázka 10
+
+  Na základě vašeho modelu odpovězte, zdali si myslíte, že pokud bychom dokázali snížit krimalitu v dané lokalitě, vedlo by to ke zvýšení cen nemovitostí určených k bydlení v dané lokalitě? 
+
+
+* Odpoveď 10
+
+  Na základe nášho modelu by bola odpoveď zjavná ak by platila nezávislosť medzi všetkými prediktormi resp. by pri zmene kriminality ostali všetky ostatné premenné konštantné. To v praxi ale nevieme zaistiť ani zistiť pretože ako bolo popísané v odpovedi 7 tak premenná \texttt{crim} môže byť vo vzťahu s inou premennou v našom modely a tak jej zmena môže spôsobiť zmenu tejto na nej závislej premennej a teda výsledná zmena ceny by bola ovplyvnená oboma týmito zmenami kriminality ako aj na nej závislom regresore. Taktiež sa teoreticky môže stať, že kriminalita ovplyvňuje neznámu premennú, ktorú v modely ani nemáme ale táto neznáma premenná tiež ovplyvňuje cenu nehnuteľnosti. Z nášho modelu teda plynie iba to, že za predokladu nezávislosti iných premenných na kriminalite by sa cena nehnuteľnosti mala zvýšiť pri znížení kriminality (viď odpoveď 8).
